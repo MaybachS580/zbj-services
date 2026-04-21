@@ -1,0 +1,103 @@
+{
+  "name": "跨境电商自动化 - 订单处理全流程",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-order",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-new-order",
+      "name": "新订单 Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "接收来自 Shopify/Amazon 的新订单通知"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.order_status }}",
+              "operation": "equals",
+              "value2": "confirmed"
+            }
+          ]
+        }
+      },
+      "id": "if-order-confirmed",
+      "name": "检查订单状态",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPPLIER_API_URL }}/notify",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "order_id", "value": "={{ $json.order_id }}" },
+            { "name": "sku", "value": "={{ $json.sku }}" },
+            { "name": "quantity", "value": "={{ $json.quantity }}" },
+            { "name": "shipping_address", "value": "={{ $json.shipping_address }}" }
+          ]
+        }
+      },
+      "id": "notify-supplier",
+      "name": "通知供应商",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.INVENTORY_API_URL }}/update",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "sku", "value": "={{ $json.sku }}" },
+            { "name": "quantity_sold", "value": "={{ $json.quantity }}" }
+          ]
+        }
+      },
+      "id": "update-inventory",
+      "name": "更新库存",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 360]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.WECHAT_GROUP_ID }}",
+        "text": "=📦 新订单到达！\n订单ID: {{ $json.order_id }}\nSKU: {{ $json.sku }}\n数量: {{ $json.quantity }}\n金额: {{ $json.total_amount }}"
+      },
+      "id": "wechat-notify",
+      "name": "微信通知老板",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [680, 520],
+      "notes": "可替换为微信/飞书通知节点"
+    }
+  ],
+  "connections": {
+    "新订单 Webhook": {
+      "main": [[{ "node": "检查订单状态", "type": "main", "index": 0 }]]
+    },
+    "检查订单状态": {
+      "main": [
+        [
+          { "node": "通知供应商", "type": "main", "index": 0 },
+          { "node": "更新库存", "type": "main", "index": 0 },
+          { "node": "微信通知老板", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "description": "新订单自动触发：通知供应商 + 更新库存 + 微信推送，三路并行"
+}
