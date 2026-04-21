@@ -1,0 +1,13 @@
+{
+  "company_name": "示例科技有限公司",
+  "industry": "电商",
+  "team_size": 15,
+  "tools_used": ["微信", "钉钉", "Excel", "淘宝后台", "ERP"],
+  "tool_integration_level": 2,
+  "repetitive_work_hours_per_week": 25,
+  "data_silos_count": 4,
+  "automation_awareness": 3,
+  "has_crm": false,
+  "report_generation_hours_per_week": 8,
+  "main_pain_points": ["手工报表", "多平台库存不同步", "客服重复回复"]
+}
