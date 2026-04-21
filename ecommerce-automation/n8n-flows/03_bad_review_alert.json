@@ -1,0 +1,88 @@
+{
+  "name": "跨境电商自动化 - 差评预警",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "每2小时检查一次",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.AMAZON_SP_API_URL }}/reviews",
+        "authentication": "headerAuth",
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-amz-access-token", "value": "={{ $env.AMAZON_TOKEN }}" }
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            { "name": "star_ratings", "value": "1,2,3" },
+            { "name": "sort_by", "value": "RECENT" }
+          ]
+        }
+      },
+      "id": "fetch-reviews",
+      "name": "拉取低分评价",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.reviews.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "has-bad-reviews",
+      "name": "有差评？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.NOTIFY_CHAT_ID }}",
+        "text": "=⚠️ 差评预警！\n\n收到 {{ $json.reviews.length }} 条低分评价\n\n最新一条：\n⭐ {{ $json.reviews[0].star_rating }} 星\n👤 {{ $json.reviews[0].reviewer_name }}\n💬 {{ $json.reviews[0].review_text.substring(0, 100) }}...\n\n请尽快处理，避免影响排名！"
+      },
+      "id": "alert-bad-review",
+      "name": "立即推送差评预警",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [900, 200]
+    }
+  ],
+  "connections": {
+    "每2小时检查一次": {
+      "main": [[{ "node": "拉取低分评价", "type": "main", "index": 0 }]]
+    },
+    "拉取低分评价": {
+      "main": [[{ "node": "有差评？", "type": "main", "index": 0 }]]
+    },
+    "有差评？": {
+      "main": [[{ "node": "立即推送差评预警", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "description": "每2小时自动巡检差评，发现1-3星评价立即推送预警"
+}
