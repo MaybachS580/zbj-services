@@ -1,0 +1,81 @@
+{
+  "name": "跨境电商自动化 - 每日销售报表",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "每天早上8点",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SHOPIFY_API_URL }}/orders.json",
+        "authentication": "headerAuth",
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Shopify-Access-Token", "value": "={{ $env.SHOPIFY_TOKEN }}" }
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            { "name": "created_at_min", "value": "={{ $today.minus({days: 1}).toISO() }}" },
+            { "name": "status", "value": "paid" }
+          ]
+        }
+      },
+      "id": "fetch-shopify-orders",
+      "name": "拉取昨日Shopify订单",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const orders = $input.all()[0].json.orders || [];\nconst totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_price || 0), 0);\nconst totalOrders = orders.length;\nconst avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0;\n\nconst skuMap = {};\nfor (const order of orders) {\n  for (const item of (order.line_items || [])) {\n    skuMap[item.sku] = (skuMap[item.sku] || 0) + item.quantity;\n  }\n}\n\nconst topSku = Object.entries(skuMap).sort((a, b) => b[1] - a[1]).slice(0, 3);\n\nreturn [{\n  json: {\n    date: new Date().toLocaleDateString('zh-CN'),\n    total_orders: totalOrders,\n    total_revenue: totalRevenue.toFixed(2),\n    avg_order_value: avgOrderValue,\n    top_skus: topSku.map(([sku, qty]) => `${sku}(${qty}件)`).join(', ')\n  }\n}];"
+      },
+      "id": "calculate-stats",
+      "name": "计算昨日数据",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.NOTIFY_CHAT_ID }}",
+        "text": "=📊 {{ $json.date }} 销售日报\n━━━━━━━━━━━━━━\n订单数：{{ $json.total_orders }}\n总营收：${{ $json.total_revenue }}\n客单价：${{ $json.avg_order_value }}\n热销SKU：{{ $json.top_skus }}\n━━━━━━━━━━━━━━\n今天继续冲！💪"
+      },
+      "id": "send-report",
+      "name": "发送报表到微信/飞书",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "notes": "可替换为飞书/邮件节点"
+    }
+  ],
+  "connections": {
+    "每天早上8点": {
+      "main": [[{ "node": "拉取昨日Shopify订单", "type": "main", "index": 0 }]]
+    },
+    "拉取昨日Shopify订单": {
+      "main": [[{ "node": "计算昨日数据", "type": "main", "index": 0 }]]
+    },
+    "计算昨日数据": {
+      "main": [[{ "node": "发送报表到微信/飞书", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "description": "每天早8点自动汇总昨日销售数据，推送到老板微信/飞书"
+}
